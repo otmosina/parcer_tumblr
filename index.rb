@@ -1,4 +1,7 @@
+
 require './using_lib'
+
+
 
 THUMLR_API_KEY = "8ZPGdIRMN4KSnByE3iGstX2pQXheIj2TSpRwqn0QnRalmx70vx"
 BLOG_NAME = "50thousand.tumblr.com"
@@ -11,46 +14,30 @@ offset=0
 result_array = []
 
 
-#File.open( 'result.yaml', 'w' ) do |out|
-#  YAML.dump( ['badger', 'elephant', 'tiger'], out )
-#end
-#
-#
-#
-#out_of_file = YAML.load_file( 'result.yaml' )
-#puts  out_of_file[0]
-
-#threads = []
-#
-#['host1', 'host2'].each do |host|
-#  threads << Thread.new do
-#    call_remote "#{host}/clear_caches"
-#  end
-#end
-#
-#threads.each(&:join)
-
 start = Time.now().to_i
 
-  link = "/v2/blog/#{BLOG_NAME}/posts?api_key=#{THUMLR_API_KEY}&offset=#{offset}"
-  @result=Net::HTTP.get('api.tumblr.com', link)
-  @result = JSON.parse(@result)	
+puts "start read posts"
+
+link = "/v2/blog/#{BLOG_NAME}/posts?api_key=#{THUMLR_API_KEY}&offset=#{offset}"
+@result=Net::HTTP.get('api.tumblr.com', link)
+@result = JSON.parse(@result)	
 total_posts = @result["response"]["total_posts"] 
+total_posts = 200 if total_posts.to_i > 200 
+
+threads = []
 
 (((total_posts)/20)+1).times do |index|
-  puts offset
-  link = "/v2/blog/#{BLOG_NAME}/posts?api_key=#{THUMLR_API_KEY}&offset=#{offset}"
-  @result=Net::HTTP.get('api.tumblr.com', link)
-  @result = JSON.parse(@result)	
-
-
-  @result["response"]["posts"].each do |item|
-  	result_array << item["post_url"]
-  end	
-
+  threads << Thread.new(offset) do |offset_th|	
+    link = "/v2/blog/#{BLOG_NAME}/posts?api_key=#{THUMLR_API_KEY}&offset=#{offset_th}"
+    @result=Net::HTTP.get('api.tumblr.com', link)
+    @result = JSON.parse(@result)	
+    @result["response"]["posts"].each{ |item| result_array << {:post_url => item["post_url"], :note_count => item["note_count"] }}
+  end  #end Thread
   offset += 20
-
 end	
+
+threads.each(&:join)
+
 
 finish = Time.now().to_i
 
@@ -65,8 +52,5 @@ end
 
 
 
-puts offset
+puts "end read"
 
-
-#a=Net::HTTP.get('50thousand.tumblr.com', '/') # => String
-#puts a
