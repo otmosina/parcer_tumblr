@@ -5,7 +5,6 @@ require './using_lib'
 
 THUMLR_API_KEY = "8ZPGdIRMN4KSnByE3iGstX2pQXheIj2TSpRwqn0QnRalmx70vx"
 BLOG_NAME = "50thousand.tumblr.com"
-puts "Hello, World1"
 
 params = ""
 limit=20

@@ -17,7 +17,3 @@ result_arr_hash=result_arr_hash.sort{|a,b| b[1]<=>a[1]}
 File.open( 'general.yaml', 'w' ) do |out|
    YAML.dump(result_arr_hash, out )
  end
-#p  out_of_file[0].uniq.size
-#p  out_of_file[1].uniq.size
-
-#p  out_of_file.size
