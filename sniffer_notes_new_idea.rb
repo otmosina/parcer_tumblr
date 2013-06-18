@@ -15,7 +15,7 @@ out_of_file = YAML.load_file( 'result.yaml' )
 start_start = Time.now.to_i
 threads = []
 portion_out_of_file = []
-VOLUME_PORTION=10
+VOLUME_PORTION=200
 out_of_file.each_with_index do |elem, index|  
   p "portion #{index}"
   portion_out_of_file << elem
@@ -44,7 +44,7 @@ out_of_file.each_with_index do |elem, index|
         
         
          
-          (current_out_of_file[:note_count].to_i/500).times do |ii|
+          (current_out_of_file[:note_count].to_i/50000).times do |ii|
             p ii 
           	  if code_for_popup_notes.empty?
           	  	res_match=[]
