@@ -34,6 +34,8 @@ begin
 #         Net::HTTPBadResponse, Net::HTTPHeaderSyntaxError, Net::ProtocolError, 
 #         Errno::EMFILE, Errno::ETIMEDOUT  => se
 
+
+=begin
 def global_input_dot_in_programm
   begin
     start_script = 1
@@ -46,6 +48,7 @@ def global_input_dot_in_programm
       puts "Последняя строчка вывода"  
   end 
 end  
+=end
 
 class My  
   @@count = 0
@@ -57,7 +60,7 @@ class My
   end
 end  
 
-сlass Parcer
+class Parcer
 
 
 #===================================
@@ -68,7 +71,7 @@ end
 @@blog_for_parcer = '50thousand.tumblr.com'
 @@array_with_posts_url_by_blog = YAML.load_file( 'result.yaml' )
 
-COUNT_MIN_FROM_C = 1
+COUNT_MIN_FROM_C = 50
 @@diff_from_c = 60*COUNT_MIN_FROM_C
 
 NAME_FILE_ERROR_LOG="tumbler_error_log.log"
@@ -81,6 +84,22 @@ NAME_DIR_WITH_DATA_PARCER_POSTS="data_sniff"
 #Методы класса
 #===================================
 
+  def self.init_from_c
+    @@from_c= Time.now.to_i + @@diff_from_c #Начиная с какого времени показывать 50 notes к посту
+  end 
+
+
+  def self.get_url_blog_for_parcer
+    @@blog_for_parcer
+  end  
+
+  def self.get_array_with_posts_url_by_blog
+    @@array_with_posts_url_by_blog
+  end  
+
+  def self.get_diff_from_c
+    @@diff_from_c
+  end  
 
   def self.create_needed_files
 
@@ -111,24 +130,19 @@ NAME_DIR_WITH_DATA_PARCER_POSTS="data_sniff"
 
 #structure  hash_with_link_to_one_post = {:post_url: http://s...s.com/..., :note_count: 233722 }
   def initialize(hash_with_link_to_one_post,  index_number_of_post)
-    @post_url = hash_with_link_to_one_post[:post_url]
-    @notes_post_count = hash_with_link_to_one_post[:note_count]
-    @index_number_of_post = index_number_of_post
-    @result_parce_post = []
-    @from_c= Time.now.to_i + @@diff_from_c #Начиная с какого времени показывать 50 notes к посту
+    @post_url              = hash_with_link_to_one_post[:post_url] 
+    @notes_post_count      = hash_with_link_to_one_post[:note_count]
+    @index_number_of_post  = index_number_of_post
+    @result_parce_post     = []
 
     #Инициализация методов ниже скорее всего не надо выносить в отдельные методы, пусть даже и приватные
     #А мо  
     self.set_post_uri
     self.set_key_popup_notes
-  end 
-
-  def from_c
-    return @from_c -= @@diff_from_c
   end  
 
   def get_result_for_one_notes_page #return [[who reblog][from reblog]]
-    uri_note_page = @key_popup+"?from_c="+self.from_c
+    uri_note_page = @key_popup+"?from_c="+Parcer.from_c!
     tries = 0 
     begin
       tries += 1
@@ -151,32 +165,28 @@ NAME_DIR_WITH_DATA_PARCER_POSTS="data_sniff"
 
   end  
 
+#==========================================
+# Дополнительные методы класса
+#==========================================
 
+#CHECK this method
+  def self.from_c!
+    return (@@from_c = @@from_c - @@diff_from_c).to_s
+  end 
 
-====
-    link_next = code_for_popup_notes[0][0]+"?from_c="+from_c.to_s
-              begin
-                @result=Net::HTTP.get('50thousand.tumblr.com', link_next)
-                rescue SocketError , Timeout::Error, Errno::EINVAL, Errno::ECONNRESET, EOFError,
-                       Net::HTTPBadResponse, Net::HTTPHeaderSyntaxError, Net::ProtocolError, 
-                       Errno::EMFILE, Errno::ETIMEDOUT  => se
-          
-                    sleep 3   
-          
-                end
-            
-          
-              begin @result = @result.force_encoding('utf-8').encode rescue "" end
-              begin res_match = @result.scan(/>(.*)<\/a> reblogged this from <a.*source_tumblelog.*>(.*)<\/a>/) rescue [] end
-          
+  def self.from_c
+    return @@from_c.to_s
+  end  
 
-====  
-
-private
+#CEHCK this
+#private
   def set_post_uri
-    @post_uri = @post_url.match(/#{@post_url}(.*)/) 
-    raise ArgumentError "Ссылка на пост не содержит uri или uri слишком короткое" if @post_uri.nil? or @post_uri.size < 2
-    @post_uri = @post_uri.match(/#{@post_url}(.*)/)[1]
+    #Нужно чтобы прочекать
+    @post_uri = @post_url.match(/#{@@blog_for_parcer}(.*)/)[1] 
+    raise ArgumentError, "Link don't exists uri or uri very short" if @post_uri.nil? or @post_uri.size < 2
+
+    @post_uri = @post_url.match(/#{@@blog_for_parcer}(.*)/)[1]
+
   end  
 
   def set_key_popup_notes
@@ -189,95 +199,112 @@ private
     #begin @key_popup = html_code_post_page.scan(/tumblrReq.open.*\'(.*)\?/) rescue [] end
   end  
 
-end
-        
+end     
 
-Exception.new("message") or Exception.exception("message")
-class MyError < StandartError; end;
-
+#Exception.new("message") or Exception.exception("message")
+#class MyError < StandartError; end;
 
 
-
-blog_link = '50thousand.tumblr.com'
-total_total_result = []
-
-out_of_file = YAML.load_file( 'result.yaml' )
-
-start_start = Time.now.to_i
-threads = []
-portion_out_of_file = []
-VOLUME_PORTION=200
-out_of_file.each_with_index do |elem, index|  
-  p "portion #{index}"
-  portion_out_of_file << elem
-  if (index % VOLUME_PORTION == 0 )and(index != 0)
-    portion_out_of_file.each_with_index do |out_of_file_item, index_portion|
-      threads << Thread.new(out_of_file_item, index_portion+index-VOLUME_PORTION) do |out_of_file_item_th, index_th|
-        total_result = []	
-        current_out_of_file = out_of_file_item_th	
-        
-        
-        link = current_out_of_file[:post_url].match(/50thousand.tumblr.com(.*)/)[1]
-        
-        from_c = Time.now.to_i
-        @result=Net::HTTP.get(blog_link, link)
-        link = link.gsub(/post/,"notes") 
-        
-        @result = @result.force_encoding('utf-8').encode
-        begin code_for_popup_notes = @result.scan(/tumblrReq.open.*\'(.*)\?/) rescue [] end#(/tumblrReq.open.*\/(.*)\?/)
-        
-        
-        # => puts "Analize #{current_out_of_file[:post_url]} notes. Index post - #{index}"
-        # => 
-        # => File.open( 'analize_post.yaml', 'a' ) do |out|
-        # =>   YAML.dump("Analize #{current_out_of_file[:post_url]} notes. Index post - #{index}", out )
-        # => end
-        
-        
-         
-          (current_out_of_file[:note_count].to_i/50000).times do |ii|
-            p ii 
-          	  if code_for_popup_notes.empty?
-          	  	res_match=[]
-          	  else		
-          		link_next = code_for_popup_notes[0][0]+"?from_c="+from_c.to_s
-          		begin
-          		  @result=Net::HTTP.get('50thousand.tumblr.com', link_next)
-          		  rescue SocketError , Timeout::Error, Errno::EINVAL, Errno::ECONNRESET, EOFError,
-                 			 Net::HTTPBadResponse, Net::HTTPHeaderSyntaxError, Net::ProtocolError, 
-                 			 Errno::EMFILE, Errno::ETIMEDOUT  => se
-          
-             		    sleep 3   
-          
-            		end
-            
-          
-          		begin @result = @result.force_encoding('utf-8').encode rescue "" end
-          		begin res_match = @result.scan(/>(.*)<\/a> reblogged this from <a.*source_tumblelog.*>(.*)<\/a>/) rescue [] end
-          
-          		total_result += res_match
-          	  end #else of 	if code_for_popup_notes.empty?
-          
-          	from_c = from_c - 60*1
-          
-          		
-          	
-          end #(current_out_of_file[:note_count].to_i/50).times 
-        #total_result
-        File.open( "data_sniff/#{index_th}.yaml", 'w' ) do |out|
-          YAML.dump(total_result, out )
-        end
-      end #threads << Thread.new(out_of_file_item) do |out_of_file_item_th|
-    end #out_of_file.each_with_index do |out_of_file_item, index|
-    threads.each(&:join)
-    File.open( "portion.log", 'a' ) {|out| out.write "portion end|" }
-    portion_out_of_file = []
-  end #if index % 20 == 0  
-end #out_of_file.each_with_index do |elem, index| 
+url__blog_for_parcer = Parcer.get_url_blog_for_parcer
+array_with_posts_url_by_blog = Parcer.get_array_with_posts_url_by_blog
+diff_from_c = Parcer.get_diff_from_c
 
 
- finish_finish = Time.now.to_i
-File.open( 'big_job_time.time', 'w' ) {|out| out.write  (finish_finish-start_start).to_s }
+
+array_with_posts_url_by_blog.each_with_index do |post_hash, index|
+  p "#{index} - #{post_hash}"
+  Parcer.init_from_c
+  (post_hash[:note_count]/50000).times do |note_index|
+    p "COUNT - #{note_index}"
+    pasre_one_post = Parcer.new(post_hash, note_index)
+    p pasre_one_post.get_result_for_one_notes_page
+    puts Parcer.from_c
+  end  
+end  
+
+
+
+
+#blog_link = '50thousand.tumblr.com'
+#total_total_result = []
+#
+#out_of_file = YAML.load_file( 'result.yaml' )
+#
+#start_start = Time.now.to_i
+#threads = []
+#portion_out_of_file = []
+#VOLUME_PORTION=200
+#out_of_file.each_with_index do |elem, index|  
+#  p "portion #{index}"
+#  portion_out_of_file << elem
+#  if (index % VOLUME_PORTION == 0 )and(index != 0)
+#    portion_out_of_file.each_with_index do |out_of_file_item, index_portion|
+#      threads << Thread.new(out_of_file_item, index_portion+index-VOLUME_PORTION) do |out_of_file_item_th, index_th|
+#        total_result = []	
+#        current_out_of_file = out_of_file_item_th	
+#        
+#        
+#        link = current_out_of_file[:post_url].match(/50thousand.tumblr.com(.*)/)[1]
+#        
+#        from_c = Time.now.to_i
+#        @result=Net::HTTP.get(blog_link, link)
+#        link = link.gsub(/post/,"notes") 
+#        
+#        @result = @result.force_encoding('utf-8').encode
+#        begin code_for_popup_notes = @result.scan(/tumblrReq.open.*\'(.*)\?/) rescue [] end#(/tumblrReq.open.*\/(.*)\?/#)
+#        
+#        
+#        # => puts "Analize #{current_out_of_file[:post_url]} notes. Index post - #{index}"
+#        # => 
+#        # => File.open( 'analize_post.yaml', 'a' ) do |out|
+#        # =>   YAML.dump("Analize #{current_out_of_file[:post_url]} notes. Index post - #{index}", out )
+#        # => end
+#        
+#        
+#         
+#          (current_out_of_file[:note_count].to_i/50000).times do |ii|
+#            p ii 
+#          	  if code_for_popup_notes.empty?
+#          	  	res_match=[]
+#          	  else		
+#          		link_next = code_for_popup_notes[0][0]+"?from_c="+from_c.to_s
+#          		begin
+#          		  @result=Net::HTTP.get('50thousand.tumblr.com', link_next)
+#          		  rescue SocketError , Timeout::Error, Errno::EINVAL, Errno::ECONNRESET, EOFError,
+#                 			 Net::HTTPBadResponse, Net::HTTPHeaderSyntaxError, Net::ProtocolError, 
+#                 			 Errno::EMFILE, Errno::ETIMEDOUT  => se
+#          
+#             		    sleep 3   
+#          
+#            		end
+#            
+#          
+#          		begin @result = @result.force_encoding('utf-8').encode rescue "" end
+#          		begin res_match = @result.scan(/>(.*)<\/a> reblogged this from <a.*source_tumblelog.*>(.*)<\/a>/) rescue #[] end
+#          
+#          		total_result += res_match
+#          	  end #else of 	if code_for_popup_notes.empty?
+#          
+#          	from_c = from_c - 60*1
+#          
+#          		
+#          	
+#          end #(current_out_of_file[:note_count].to_i/50).times 
+#        #total_result
+#        File.open( "data_sniff/#{index_th}.yaml", 'w' ) do |out|
+#          YAML.dump(total_result, out )
+#        end
+#      end #threads << Thread.new(out_of_file_item) do |out_of_file_item_th|
+#    end #out_of_file.each_with_index do |out_of_file_item, index|
+#    threads.each(&:join)
+#    File.open( "portion.log", 'a' ) {|out| out.write "portion end|" }
+#    portion_out_of_file = []
+#  end #if index % 20 == 0  
+#end #out_of_file.each_with_index do |elem, index| 
+#
+#
+# finish_finish = Time.now.to_i
+#File.open( 'big_job_time.time', 'w' ) {|out| out.write  (finish_finish-start_start).to_s }
 
   
 
