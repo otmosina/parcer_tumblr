@@ -1,4 +1,3 @@
-
 # coding: utf-8
 #require './using_lib'
 require 'net/http'
@@ -56,8 +55,12 @@ class My
     @@count
   end    
   def initialize
-    @@count += 1
+    @count = @@count += 1
   end
+
+  def p
+    @count
+  end  
 end  
 
 class Parcer
@@ -71,6 +74,9 @@ class Parcer
 @@blog_for_parcer = '50thousand.tumblr.com'
 @@array_with_posts_url_by_blog = YAML.load_file( 'result.yaml' )
 
+
+VOLUME_FOR_PARCE = 50000
+
 COUNT_MIN_FROM_C = 50
 @@diff_from_c = 60*COUNT_MIN_FROM_C
 
@@ -78,16 +84,26 @@ NAME_FILE_ERROR_LOG="tumbler_error_log.log"
 NAME_DIR_WITH_DATA_PARCER_POSTS="data_sniff"
 
 @@count_not_parce_after_4_tries = 0
+@@index_to_parce = 0
+
+@@cannot_parce = 0
 
 
 #===================================
 #Методы класса
 #===================================
 
-  def self.init_from_c
-    @@from_c= Time.now.to_i + @@diff_from_c #Начиная с какого времени показывать 50 notes к посту
-  end 
+  def self.init
+    @@work_time = Time.now.to_i
+  end
+  
+  def self.report
+    p "Time to script: #{Time.now.to_i - @@work_time}"
+  end  
 
+  def self.cannot_parce
+    return @@cannot_parce
+  end  
 
   def self.get_url_blog_for_parcer
     @@blog_for_parcer
@@ -104,9 +120,9 @@ NAME_DIR_WITH_DATA_PARCER_POSTS="data_sniff"
   def self.create_needed_files
 
     #Файлы и директории, которые должны быть созданы
-    File.open(NAME_FILE_ERROR_LOG, 'w') {} unless File.exists?(NAME_FILE_ERROR_LOG)
-    Dir.mkdir(NAME_DIR_WITH_DATA_PARCER_POSTS) unless FIle.directory?(NAME_DIR_WITH_DATA_PARCER_POSTS)
+    Dir.mkdir(NAME_DIR_WITH_DATA_PARCER_POSTS) unless File.directory?(NAME_DIR_WITH_DATA_PARCER_POSTS)
     #Файлы, которые должны быть пустыми перед началом работы
+    File.open(NAME_FILE_ERROR_LOG, 'w') {} #unless File.exists?(NAME_FILE_ERROR_LOG)
   end  
 
   def self.add_message_to_error_log(message)
@@ -129,20 +145,51 @@ NAME_DIR_WITH_DATA_PARCER_POSTS="data_sniff"
 
 
 #structure  hash_with_link_to_one_post = {:post_url: http://s...s.com/..., :note_count: 233722 }
-  def initialize(hash_with_link_to_one_post,  index_number_of_post)
+  def initialize(hash_with_link_to_one_post)
     @post_url              = hash_with_link_to_one_post[:post_url] 
     @notes_post_count      = hash_with_link_to_one_post[:note_count]
-    @index_number_of_post  = index_number_of_post
     @result_parce_post     = []
 
+    #Порядковый номер поступившего на парс блога
+    @index_to_parce = @@index_to_parce += 1 
+
     #Инициализация методов ниже скорее всего не надо выносить в отдельные методы, пусть даже и приватные
-    #А мо  
-    self.set_post_uri
-    self.set_key_popup_notes
+    #Добавить логгинг из-за чего не смог распарситься пост
+    @can_parce = @notes_post_count.to_s.size != 0 && @post_url.to_s.size != 0  
+    @can_parce = @can_parce && self.set_post_uri && self.set_key_popup_notes 
   end  
 
+  def info_about_parce_post
+    { :post_url => @post_url, :note_count => @notes_post_count, :index_to_parce => @index_to_parce }.inspect
+  end  
+
+  def parce
+    return @@cannot_parce += 1 unless @can_parce
+    puts "Index parced post #{@index_to_parce}"
+    p self.info_about_parce_post
+    self.init_from_c
+  
+    (@notes_post_count/VOLUME_FOR_PARCE).times do |times_index|     
+      self.get_result_for_one_notes_page
+      p "#{times_index} : #{self.from_c}"
+    end  
+
+  end  
+
+  def init_from_c
+    @from_c= Time.now.to_i + @@diff_from_c
+  end
+
+  def from_c!
+    return (@from_c = @from_c - @@diff_from_c).to_s
+  end 
+
+  def from_c
+    return @from_c.to_s
+  end    
+
   def get_result_for_one_notes_page #return [[who reblog][from reblog]]
-    uri_note_page = @key_popup+"?from_c="+Parcer.from_c!
+    uri_note_page = @key_popup+"?from_c="+self.from_c!  
     tries = 0 
     begin
       tries += 1
@@ -169,14 +216,6 @@ NAME_DIR_WITH_DATA_PARCER_POSTS="data_sniff"
 # Дополнительные методы класса
 #==========================================
 
-#CHECK this method
-  def self.from_c!
-    return (@@from_c = @@from_c - @@diff_from_c).to_s
-  end 
-
-  def self.from_c
-    return @@from_c.to_s
-  end  
 
 #CEHCK this
 #private
@@ -186,6 +225,7 @@ NAME_DIR_WITH_DATA_PARCER_POSTS="data_sniff"
     raise ArgumentError, "Link don't exists uri or uri very short" if @post_uri.nil? or @post_uri.size < 2
 
     @post_uri = @post_url.match(/#{@@blog_for_parcer}(.*)/)[1]
+    return true unless @post_uri.to_s.empty?
 
   end  
 
@@ -194,7 +234,16 @@ NAME_DIR_WITH_DATA_PARCER_POSTS="data_sniff"
     #Перевод в нужную нам кодировку
     html_code_post_page = Parcer.force_encoding_to_utf(html_code_post_page)#force_encoding('utf-8').encode
     #Нужно желать какой-то чек, что переводировали  нормально
-    @key_popup = html_code_post_page.scan(/tumblrReq.open.*\'(.*)\?/)[0][0]
+    begin
+      @key_popup = html_code_post_page.scan(/tumblrReq.open.*\'(.*)\?/)[0][0] 
+      rescue Exception => error
+        Parcer.add_message_to_error_log ("I_could_not_parce | #{self.info_about_parce_post}")
+        puts "I_could_not_parce | #{self.info_about_parce_post} | because #{error.class} - #{error.message}"
+        return false
+      else
+        return true unless @key_popup.to_s.empty?   
+    end  
+    
     #Изначально мы обрабатывали исключение при чтении неверной кодировки
     #begin @key_popup = html_code_post_page.scan(/tumblrReq.open.*\'(.*)\?/) rescue [] end
   end  
@@ -203,26 +252,63 @@ end
 
 #Exception.new("message") or Exception.exception("message")
 #class MyError < StandartError; end;
+def main
+  GC::Profiler.enable
+  GC::Profiler.clear
+  begin
+    Parcer.init
+    Parcer.create_needed_files
+    url_blog_for_parcer = Parcer.get_url_blog_for_parcer
+    array_with_posts_url_by_blog = Parcer.get_array_with_posts_url_by_blog
+    diff_from_c = Parcer.get_diff_from_c
+    array_with_posts_url_by_blog.each do |hash_post|
+        pasre_one_post = Parcer.new(hash_post)
+        pasre_one_post.parce
+    end
+  
+  ensure
+    p "Count cannot parce = #{Parcer.cannot_parce}"
+    Parcer.report
+    GC::Profiler.report
+  end
+end
 
+def main_par
 
-url__blog_for_parcer = Parcer.get_url_blog_for_parcer
-array_with_posts_url_by_blog = Parcer.get_array_with_posts_url_by_blog
-diff_from_c = Parcer.get_diff_from_c
+  GC::Profiler.enable
+  GC::Profiler.clear
+  begin
+    Parcer.init
+    Parcer.create_needed_files
+    url_blog_for_parcer = Parcer.get_url_blog_for_parcer
+    array_with_posts_url_by_blog = Parcer.get_array_with_posts_url_by_blog
+    diff_from_c = Parcer.get_diff_from_c
+    thread = []
+    array_with_posts_url_by_blog.each do |hash_post|
+      thread << Thread.new(hash_post) do |hash_post_th|
+        pasre_one_post = Parcer.new(hash_post_th)
+        pasre_one_post.parce
+      end #Thread
+    end
+    thread.each(&:join)
+  
+  ensure
+    p "Count cannot parce = #{Parcer.cannot_parce}"
+    Parcer.report
+    GC::Profiler.report
+  end
 
-
-
-array_with_posts_url_by_blog.each_with_index do |post_hash, index|
-  p "#{index} - #{post_hash}"
-  Parcer.init_from_c
-  (post_hash[:note_count]/50000).times do |note_index|
-    p "COUNT - #{note_index}"
-    pasre_one_post = Parcer.new(post_hash, note_index)
-    p pasre_one_post.get_result_for_one_notes_page
-    puts Parcer.from_c
-  end  
 end  
 
-
+p "Start in #{Time.now}"
+case ARGV[0]
+  when "normal"
+    main
+  when "par"
+    main_par    
+  else
+    puts "Command string argument error"  
+end  
 
 
 #blog_link = '50thousand.tumblr.com'
