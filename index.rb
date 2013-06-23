@@ -1,6 +1,7 @@
 
 require './using_lib'
-
+GC::Profiler.enable
+GC::Profiler.clear
 
 
 THUMLR_API_KEY = "8ZPGdIRMN4KSnByE3iGstX2pQXheIj2TSpRwqn0QnRalmx70vx"
@@ -53,3 +54,4 @@ end
 
 puts "end read"
 
+GC::Profiler.report

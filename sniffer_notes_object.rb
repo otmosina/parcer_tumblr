@@ -63,6 +63,33 @@ class My
   end  
 end  
 
+class ParcerDataAnalize
+#в data_sniff хранятся файлы по количеству постов с данным по парсу
+#данные - "кем_сделан_реблог:с какого блога реблог"
+#в рамках одного файла небходимо удалить идентичные пары
+#Возможно перегнать из всех файлов в один файл
+
+@@example_name_file_with_notes_data = 'data_sniff/1.blog_notes'
+
+  def initialize
+  end  
+end  
+
+class ThreadManager
+#attr_accessor :thread
+attr_reader :thread
+  def initialize
+    @thread = Thread.new
+  end  
+end  
+
+
+
+
+####################################################################
+#===================================================================
+####################################################################
+
 class Parcer
 
 
@@ -75,18 +102,22 @@ class Parcer
 @@array_with_posts_url_by_blog = YAML.load_file( 'result.yaml' )
 
 
-VOLUME_FOR_PARCE = 50000
+VOLUME_FOR_PARCE = 500
 
-COUNT_MIN_FROM_C = 50
+COUNT_MIN_FROM_C = 1
 @@diff_from_c = 60*COUNT_MIN_FROM_C
 
 NAME_FILE_ERROR_LOG="tumbler_error_log.log"
-NAME_DIR_WITH_DATA_PARCER_POSTS="data_sniff"
+@@name_dir_with_data_parcer_posts ="data_sniff"
+#@@name_file_where_info_to_next_step = 'info_to_next_step.file'
 
 @@count_not_parce_after_4_tries = 0
 @@index_to_parce = 0
 
-@@cannot_parce = 0
+@@cannot_parce_post = 0
+
+@@cannot_parce_notes = 0
+@@array_with_url_to_unparce_notes = []
 
 
 #===================================
@@ -95,14 +126,20 @@ NAME_DIR_WITH_DATA_PARCER_POSTS="data_sniff"
 
   def self.init
     @@work_time = Time.now.to_i
+    @@name_dir_with_data_parcer_posts = @@name_dir_with_data_parcer_posts + "_#{Time.now.to_i}"
+    Parcer.create_needed_files
   end
   
   def self.report
     p "Time to script: #{Time.now.to_i - @@work_time}"
+    p "Count of cannot parse post - #{@@cannot_parce_post}"
+    p "Count of unparce notes #{@@cannot_parce_notes}" 
+    p "Name folder where data to analize #{@@name_dir_with_data_parcer_posts}"
+    p  @@array_with_url_to_unparce_notes
   end  
 
-  def self.cannot_parce
-    return @@cannot_parce
+  def self.cannot_parce_post
+    return @@cannot_parce_post
   end  
 
   def self.get_url_blog_for_parcer
@@ -120,9 +157,10 @@ NAME_DIR_WITH_DATA_PARCER_POSTS="data_sniff"
   def self.create_needed_files
 
     #Файлы и директории, которые должны быть созданы
-    Dir.mkdir(NAME_DIR_WITH_DATA_PARCER_POSTS) unless File.directory?(NAME_DIR_WITH_DATA_PARCER_POSTS)
+    Dir.mkdir(@@name_dir_with_data_parcer_posts) unless File.directory?(@@name_dir_with_data_parcer_posts)
     #Файлы, которые должны быть пустыми перед началом работы
     File.open(NAME_FILE_ERROR_LOG, 'w') {} #unless File.exists?(NAME_FILE_ERROR_LOG)
+    File.open('the_end_thread.file', 'w') {} 
   end  
 
   def self.add_message_to_error_log(message)
@@ -152,29 +190,56 @@ NAME_DIR_WITH_DATA_PARCER_POSTS="data_sniff"
 
     #Порядковый номер поступившего на парс блога
     @index_to_parce = @@index_to_parce += 1 
+    @file_name_to_notes = self.init_file_by_write_notes_result(@index_to_parce)
+
 
     #Инициализация методов ниже скорее всего не надо выносить в отдельные методы, пусть даже и приватные
     #Добавить логгинг из-за чего не смог распарситься пост
     @can_parce = @notes_post_count.to_s.size != 0 && @post_url.to_s.size != 0  
     @can_parce = @can_parce && self.set_post_uri && self.set_key_popup_notes 
+  end
+
+  def init_file_by_write_notes_result(name)
+    name = File.join(@@name_dir_with_data_parcer_posts, name.to_s+".blog_notes")
+    File.open("#{name}", "w") {}
+    return name
   end  
 
   def info_about_parce_post
-    { :post_url => @post_url, :note_count => @notes_post_count, :index_to_parce => @index_to_parce }.inspect
+    { :post_url => @post_url, :note_count => @notes_post_count, :index_to_parce => @index_to_parce }
   end  
 
   def parce
-    return @@cannot_parce += 1 unless @can_parce
+    return @@cannot_parce_post += 1 unless @can_parce
     puts "Index parced post #{@index_to_parce}"
-    p self.info_about_parce_post
+    p self.info_about_parce_post.inspect
     self.init_from_c
   
     (@notes_post_count/VOLUME_FOR_PARCE).times do |times_index|     
-      self.get_result_for_one_notes_page
+      res=self.get_result_for_one_notes_page
+      #TODO
+      #if @index_to_parce == 2
+      #  puts "==================="
+      #  p res
+      #  puts "==================="
+      #end  
+      self.write_result_one_note res
+      #END_TODO
       p "#{times_index} : #{self.from_c}"
     end  
-
+    #TODO если понадобится инкапсулировать это логирование
+    File.open('the_end_thread.file', 'a') {|f| f.puts "End_parce url => #{self.info_about_parce_post[:post_url].to_s}"} 
+    #END_TODO
   end  
+
+  #CHECKIT
+  def write_result_one_note(value) #value=[who reblogger, from reblogger]
+    File.open(@file_name_to_notes, 'a') do |f|
+      value.each do |item_author_from|
+        f.puts "#{item_author_from[0]}:#{item_author_from[1]}"
+      end  
+    end  
+  end
 
   def init_from_c
     @from_c= Time.now.to_i + @@diff_from_c
@@ -204,11 +269,18 @@ NAME_DIR_WITH_DATA_PARCER_POSTS="data_sniff"
           @@count_not_parce_after_4_tries += 1
         end      
     end  
-
-    content_note_page = Parcer.force_encoding_to_utf(content_note_page)
+    begin
+      content_note_page = Parcer.force_encoding_to_utf(content_note_page)
+      rescue Exception => e
+      @@cannot_parce_notes += 1
+      @@array_with_url_to_unparce_notes << uri_note_page   
+      content_note_page = ""  
+    end    
     #TODO добавить чек, то что перекодировали и варинат развития событий, если этого не случилось
     #return content_note_page.scan(/>(.*)<\/a> reblogged this from <a.*source_tumblelog.*>(.*)<\/a>/) rescue [] end
     return content_note_page.scan(/>(.*)<\/a> reblogged this from <a.*source_tumblelog.*>(.*)<\/a>/) 
+
+    #Вот здесь писать в файл. Один экземпляр класса - один файл
 
   end  
 
@@ -237,8 +309,8 @@ NAME_DIR_WITH_DATA_PARCER_POSTS="data_sniff"
     begin
       @key_popup = html_code_post_page.scan(/tumblrReq.open.*\'(.*)\?/)[0][0] 
       rescue Exception => error
-        Parcer.add_message_to_error_log ("I_could_not_parce | #{self.info_about_parce_post}")
-        puts "I_could_not_parce | #{self.info_about_parce_post} | because #{error.class} - #{error.message}"
+        Parcer.add_message_to_error_log ("I_could_not_parce | #{self.info_about_parce_post.inspect}")
+        puts "I_could_not_parce | #{self.info_about_parce_post.inspect} | because #{error.class} - #{error.message}"
         return false
       else
         return true unless @key_popup.to_s.empty?   
@@ -257,7 +329,6 @@ def main
   GC::Profiler.clear
   begin
     Parcer.init
-    Parcer.create_needed_files
     url_blog_for_parcer = Parcer.get_url_blog_for_parcer
     array_with_posts_url_by_blog = Parcer.get_array_with_posts_url_by_blog
     diff_from_c = Parcer.get_diff_from_c
@@ -267,7 +338,7 @@ def main
     end
   
   ensure
-    p "Count cannot parce = #{Parcer.cannot_parce}"
+    p "Count cannot parce = #{Parcer.cannot_parce_post}"
     Parcer.report
     GC::Profiler.report
   end
@@ -279,7 +350,6 @@ def main_par
   GC::Profiler.clear
   begin
     Parcer.init
-    Parcer.create_needed_files
     url_blog_for_parcer = Parcer.get_url_blog_for_parcer
     array_with_posts_url_by_blog = Parcer.get_array_with_posts_url_by_blog
     diff_from_c = Parcer.get_diff_from_c
@@ -293,19 +363,51 @@ def main_par
     thread.each(&:join)
   
   ensure
-    p "Count cannot parce = #{Parcer.cannot_parce}"
+    p "Count cannot parce = #{Parcer.cannot_parce_post}"
     Parcer.report
     GC::Profiler.report
   end
 
+end 
+
+def exec_code
+   sleep 2
+   Net::HTTP.get("50thousand.tumblr.com","/") 
+end 
+
+def test_th
+  thread = []
+
+  100.times do |index|
+    thread << Thread.new(index) do |index_th|
+      sleep 7 if index_th%5 == 0 
+      exec_code
+      p index_th
+    end  
+  end  
+
+  thread.each do |t|
+    while Thread.list.size > 5
+    end  
+    t.join
+  end
+
+  p "end"
 end  
 
 p "Start in #{Time.now}"
 case ARGV[0]
   when "normal"
+    File.open('report_normal.log', 'w'){}
     main
   when "par"
+    File.open('report_par.log', 'w'){}
     main_par    
+  when 'test_th'
+    st = Time.now.to_i
+    test_th
+    p 'you testing threads'
+    p "#{Time.now.to_i - st}"  
   else
     puts "Command string argument error"  
 end  
