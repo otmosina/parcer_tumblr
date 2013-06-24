@@ -102,8 +102,7 @@ class Parcer
 @@array_with_posts_url_by_blog = YAML.load_file( 'result.yaml' )
 
 
-VOLUME_FOR_PARCE = 500
-
+VOLUME_FOR_PARCE = 10000
 COUNT_MIN_FROM_C = 1
 @@diff_from_c = 60*COUNT_MIN_FROM_C
 
@@ -322,6 +321,12 @@ NAME_FILE_ERROR_LOG="tumbler_error_log.log"
 
 end     
 
+
+#=========================================
+#-----------Запускные программы-----------
+#=========================================
+
+
 #Exception.new("message") or Exception.exception("message")
 #class MyError < StandartError; end;
 def main
@@ -352,13 +357,38 @@ def main_par
     Parcer.init
     url_blog_for_parcer = Parcer.get_url_blog_for_parcer
     array_with_posts_url_by_blog = Parcer.get_array_with_posts_url_by_blog
+
+#improve
+    warm_label = 100_001
+    hot_label = 400_001
+
+    cold_range = 0..warm_label-1
+    warm_range = warm_label..hot_label-1
+    hot_range = hot_label..1_000_000       
+
+    array_with_posts_url_by_blog = array_with_posts_url_by_blog.sort_by{|elem1, elem2| elem1[:note_count]  }.reverse
+#end_improve
+
     diff_from_c = Parcer.get_diff_from_c
     thread = []
+    Thread.current.priority = 50
     array_with_posts_url_by_blog.each do |hash_post|
       thread << Thread.new(hash_post) do |hash_post_th|
+
         pasre_one_post = Parcer.new(hash_post_th)
         pasre_one_post.parce
       end #Thread
+      #improve
+      case hash_post[:note_count]
+        when cold_range
+          thread.last.priority = -3
+        when warm_range
+          thread.last.priority = -3
+        when hot_range
+          thread.last.priority = 0                        
+      end  
+      #end_improve      
+
     end
     thread.each(&:join)
   
@@ -370,30 +400,210 @@ def main_par
 
 end 
 
+
+def group_thread
+
+  GC::Profiler.enable
+  GC::Profiler.clear
+  begin
+    Parcer.init
+    url_blog_for_parcer = Parcer.get_url_blog_for_parcer
+    array_with_posts_url_by_blog = Parcer.get_array_with_posts_url_by_blog
+#improve
+    warm_label = 150_001
+    hot_label = 250_001
+
+    cold_range = 0..warm_label-1
+    warm_range = warm_label..hot_label-1
+    hot_range = hot_label..1_000_000       
+
+    array_with_posts_url_by_blog = array_with_posts_url_by_blog.sort_by{|elem1, elem2| elem1[:note_count]  }.reverse
+#end_improve    
+    diff_from_c = Parcer.get_diff_from_c
+    thread = []
+    array_with_posts_url_by_blog.each do |hash_post|
+      thread << Thread.new(hash_post) do |hash_post_th|
+        pasre_one_post = Parcer.new(hash_post_th)
+        pasre_one_post.parce
+      end #Thread
+
+      #improve
+      case hash_post[:note_count]
+        when cold_range
+          thread.last.priority = -3
+        when warm_range
+          thread.last.priority = -2
+        when hot_range
+          thread.last.priority = 0                        
+      end  
+      #end_improve  
+
+      while Thread.list.size > 40#50 - лучший результат 130
+        #sleep 3
+        Thread.pass
+      end
+
+    end
+    while Thread.list.size > 1
+      #sleep 3
+      Thread.pass    
+    end
+    #Thread.list.each(&:join)
+    
+    #thread.each(&:join)
+    #Группировка по N исполняющих потоков
+    #thread.each do |t|
+    #  while Thread.list.size > 100
+    #  end
+    #  t.join  
+    #end  
+
+  ensure
+    p "Count cannot parce = #{Parcer.cannot_parce_post}"
+    Parcer.report
+    GC::Profiler.report
+  end  
+
+end  
+
+
+#=========================================
+#-----------Запускные программы-----------
+#=========================================
+
+
 def exec_code
    sleep 2
    Net::HTTP.get("50thousand.tumblr.com","/") 
 end 
 
-def test_th
-  thread = []
+def get_count_hot_content
 
-  100.times do |index|
-    thread << Thread.new(index) do |index_th|
-      sleep 7 if index_th%5 == 0 
-      exec_code
-      p index_th
-    end  
-  end  
+   warm_label = 150_001
+   hot_label = 250_001
+  
+   cold_range = 0..warm_label-1
+   warm_range = warm_label..hot_label-1
+   hot_range = hot_label..1_000_000 
+  
+   array_with_posts_url_by_blog = Parcer.get_array_with_posts_url_by_blog
+  
+  
+   hot = 0
+   warm = 0 
+   cold = 0
+  
+   array_with_posts_url_by_blog = array_with_posts_url_by_blog.sort_by{|elem1, elem2| elem1[:note_count]  }.reverse
+   
+   array_with_posts_url_by_blog.each do |item|
+     case item[:note_count]
+       when cold_range
+         cold+=1
+       when warm_range
+         warm+=1
+       when hot_range
+         hot+=1                    
+     end  
+   end 
+  
+   p array_with_posts_url_by_blog[0]
+   p array_with_posts_url_by_blog[1]
+   p array_with_posts_url_by_blog[2]
+   p array_with_posts_url_by_blog.last
+   p "cold = #{cold}"
+       p "warm = #{warm}"
+           p "hot = #{hot}"
+end  
 
-  thread.each do |t|
-    while Thread.list.size > 5
-    end  
-    t.join
+def get_time_run_sleep
+
+  count_run_a = count_run_b = count_sleep_a = count_sleep_b = 0
+
+  a = Thread.new do
+    sleep 10
   end
+
+
+  b = Thread.new do
+    sleep 5
+  end
+
+  a.priority = b.priority = -1   
+
+  while Thread.list.size > 1
+    count_run_a += 1 if a.status == "run"
+    count_run_b += 1 if b.status == "run"        
+    count_sleep_a += 1 if a.status == "sleep"
+    count_sleep_b += 1 if b.status == "sleep"    
+    sleep 1
+    #Thread.pass
+  end  
+  p "count run a = #{count_run_a}"
+  p "count run b = #{count_run_b}" 
+  p "count sleep a = #{count_sleep_a}"
+  p "count sleep b = #{count_sleep_b}"  
+
+end  
+
+def test_th
+  get_count_hot_content
+  #get_time_run_sleep
+
+
+#####################  
+
+#count1 = count2 = 0
+#a = Thread.new do
+#      loop { count1 += 1 }
+#    end
+#a.priority = -20
+#
+#b = Thread.new do
+#      loop { count2 += 1 }
+#    end
+#b.priority = -10
+#sleep 1   #=> 1
+#p "pr=#{a.priority} c=>#{count1}"    #=> 622504
+#p "pr=#{b.priority} c=>#{count2}"    #=> 5832
+
+##########################  
+
+   #array_with_posts_url_by_blog.each do |hash_post|
+
+   #end
+
+
+  #thread = []
+#
+  #100.times do |index|
+  #  thread << Thread.new(index) do |index_th|
+  #    sleep 7 if index_th%5 == 0 
+  #    exec_code
+  #    p Thread.current
+  #    sleep 2
+  #  end
+  #end    
+  #thread.each(&:join)
+
+
+#===========================
+#----------------------------
+
+
+  #sleep 5
+  #thread.each do |t|
+  #  while Thread.list.size > 5
+  #    p "Thread.list = #{Thread.list.size}"
+  #  end  
+  #  t.join
+  #end
 
   p "end"
 end  
+
+
+
+
 
 p "Start in #{Time.now}"
 case ARGV[0]
@@ -402,7 +612,10 @@ case ARGV[0]
     main
   when "par"
     File.open('report_par.log', 'w'){}
-    main_par    
+    main_par   
+  when "group"
+    File.open('report_group.log', 'w'){}
+    group_thread
   when 'test_th'
     st = Time.now.to_i
     test_th
