@@ -68,11 +68,59 @@ class ParcerDataAnalize
 #данные - "кем_сделан_реблог:с какого блога реблог"
 #в рамках одного файла небходимо удалить идентичные пары
 #Возможно перегнать из всех файлов в один файл
-
-@@example_name_file_with_notes_data = 'data_sniff/1.blog_notes'
+  @@name_file_where_name_folder_with_data_after_parce="names_data_parce_folder.txt"
+  
+  attr_reader :name_folder_to_analize, :count_of_posts
 
   def initialize
+
+    mas_with_name_folder=File.open(@@name_file_where_name_folder_with_data_after_parce,'r'){|f| f.readlines}
+    while mas_with_name_folder.last.gsub(/\n/,"").size == 0
+      mas_with_name_folder.pop 
+    end
+    @name_folder_to_analize = mas_with_name_folder.last.gsub(/\n/,"").split(",")[0]
+    @timestamp_folder_to_analize = mas_with_name_folder.last.gsub(/\n/,"").split(",")[1]
+    @count_of_posts = mas_with_name_folder.last.gsub(/\n/,"").split(",")[2] 
+    
+    @pre_analize_array = []
+    @final_analize_hash = {}
+
   end  
+
+  def pre_analize
+    (1..count_of_posts.to_i).each do |index|
+      name_current_file = File.join(@name_folder_to_analize, "#{index}.blog_notes")
+      mas_value_of_current_file = File.open(name_current_file, 'r'){|f| f.readlines}
+      mas_value_of_current_file = mas_value_of_current_file.map(&:strip)
+      mas_value_of_current_file.uniq!
+      mas_value_of_current_file.each{|item| @pre_analize_array << [item.split(":")[0], item.split(":")[1]]}
+    end       
+  end
+  
+  def final_analize
+    @pre_analize_array.each do |item|
+      if @final_analize_hash.include? item[1]
+        @final_analize_hash[item[1]] += 1
+      else
+        @final_analize_hash[item[1]] = 1
+      end  
+    end  
+  end
+
+  def write_to_file_final
+    @name_result_file = "general_#{@timestamp_folder_to_analize}.yaml"
+    final_analize_array = @final_analize_hash.sort{|elem1, elem2| elem2[1] <=> elem1[1] }
+    File.open( @name_result_file, 'w' ) do |out|
+      YAML.dump(final_analize_array, out )
+    end
+  end  
+  
+  def run_analize
+    self.pre_analize
+    self.final_analize
+    self.write_to_file_final
+  end  
+
 end  
 
 class ThreadManager
@@ -108,6 +156,7 @@ COUNT_MIN_FROM_C = 1
 
 NAME_FILE_ERROR_LOG="tumbler_error_log.log"
 @@name_dir_with_data_parcer_posts ="data_sniff"
+@@name_file_where_name_folder_with_data_after_parce="names_data_parce_folder.txt"
 #@@name_file_where_info_to_next_step = 'info_to_next_step.file'
 
 @@count_not_parce_after_4_tries = 0
@@ -126,6 +175,7 @@ NAME_FILE_ERROR_LOG="tumbler_error_log.log"
   def self.init
     @@work_time = Time.now.to_i
     @@name_dir_with_data_parcer_posts = @@name_dir_with_data_parcer_posts + "_#{Time.now.to_i}"
+    File.open(@@name_file_where_name_folder_with_data_after_parce, 'a'){|f| f.puts "#{@@name_dir_with_data_parcer_posts},#{Time.now.to_i},#{@@array_with_posts_url_by_blog.size}"}
     Parcer.create_needed_files
   end
   
@@ -157,6 +207,8 @@ NAME_FILE_ERROR_LOG="tumbler_error_log.log"
 
     #Файлы и директории, которые должны быть созданы
     Dir.mkdir(@@name_dir_with_data_parcer_posts) unless File.directory?(@@name_dir_with_data_parcer_posts)
+    File.open(@@name_file_where_name_folder_with_data_after_parce,'w'){} unless File.exists?(@@name_file_where_name_folder_with_data_after_parce)
+
     #Файлы, которые должны быть пустыми перед началом работы
     File.open(NAME_FILE_ERROR_LOG, 'w') {} #unless File.exists?(NAME_FILE_ERROR_LOG)
     File.open('the_end_thread.file', 'w') {} 
@@ -359,19 +411,12 @@ def main_par
     array_with_posts_url_by_blog = Parcer.get_array_with_posts_url_by_blog
 
 #improve
-    warm_label = 100_001
-    hot_label = 400_001
-
-    cold_range = 0..warm_label-1
-    warm_range = warm_label..hot_label-1
-    hot_range = hot_label..1_000_000       
-
     array_with_posts_url_by_blog = array_with_posts_url_by_blog.sort_by{|elem1, elem2| elem1[:note_count]  }.reverse
 #end_improve
 
     diff_from_c = Parcer.get_diff_from_c
     thread = []
-    Thread.current.priority = 50
+
     array_with_posts_url_by_blog.each do |hash_post|
       thread << Thread.new(hash_post) do |hash_post_th|
 
@@ -379,14 +424,14 @@ def main_par
         pasre_one_post.parce
       end #Thread
       #improve
-      case hash_post[:note_count]
-        when cold_range
-          thread.last.priority = -3
-        when warm_range
-          thread.last.priority = -3
-        when hot_range
-          thread.last.priority = 0                        
-      end  
+      #case hash_post[:note_count]
+      #  when cold_range
+      #    thread.last.priority = -3
+      #  when warm_range
+      #    thread.last.priority = -3
+      #  when hot_range
+      #    thread.last.priority = 0                        
+      #end  
       #end_improve      
 
     end
@@ -438,7 +483,7 @@ def group_thread
       end  
       #end_improve  
 
-      while Thread.list.size > 40#50 - лучший результат 130
+      while Thread.list.size > 50#50 - лучший результат 130
         #sleep 3
         Thread.pass
       end
@@ -464,6 +509,17 @@ def group_thread
     GC::Profiler.report
   end  
 
+end  
+
+def analizer
+  begin
+    GC::Profiler.enable
+    GC::Profiler.clear
+    parc_analizer = ParcerDataAnalize.new
+    parc_analizer.run_analize    
+  ensure
+    GC::Profiler.report
+  end
 end  
 
 
@@ -505,14 +561,10 @@ def get_count_hot_content
          hot+=1                    
      end  
    end 
-  
-   p array_with_posts_url_by_blog[0]
-   p array_with_posts_url_by_blog[1]
-   p array_with_posts_url_by_blog[2]
-   p array_with_posts_url_by_blog.last
+
    p "cold = #{cold}"
-       p "warm = #{warm}"
-           p "hot = #{hot}"
+   p "warm = #{warm}"
+   p "hot = #{hot}"
 end  
 
 def get_time_run_sleep
@@ -621,6 +673,8 @@ case ARGV[0]
     test_th
     p 'you testing threads'
     p "#{Time.now.to_i - st}"  
+  when 'analize'
+    analizer
   else
     puts "Command string argument error"  
 end  
